@@ -1,0 +1,116 @@
+
+@{
+    Layout = "~/Views/Shared/_LayoutPublic.cshtml";
+}
+
+<style>
+    .msg-thread-container, .convoContainer {
+        height: 30em;
+        overflow-y: auto;
+    }
+
+    .wrapper {
+        background: url();
+    }
+
+    .message-thread {
+        word-wrap: break-word;
+    }
+
+    .message-received {
+        color: #B1A18F;
+        background-color: #E8D6CB;
+    }
+
+    .new-conversation {
+        color: white;
+        background-color: #B1A18F;
+    }
+
+        a.list-group-item:focus, a.list-group-item:hover,
+        .new-conversation p, .new-conversation small,
+        .new-conversation h5 {
+            color: white;
+            background-color: #B1A18F;
+            -webkit-transition: all 0.4s ease-in-out;
+        }
+
+    .ui-select-search {
+        padding: 0px;
+    }
+</style>
+
+<br />
+
+<div class="container" ng-controller="messageController as msgController" ng-cloak>
+    <div class="row">
+        <div class="col-md-4 container">
+            <label>Messaging</label> <a href="javascript:void(0)" ng-click="msgController.open()" class="pull-right" title="Compose a new message"><i class="fa fa-pencil-square-o fa-2x" aria-hidden="true"></i></a>
+        <hr />
+            <div class="convoContainer">
+                <!--Convo threads go here-->
+                <div ng-hide="msgController.conversations.length > 0">
+                    <p class="list-group-item-text text-center text-muted">Start a new conversation above!</p>
+                </div>
+                <a href="javascript:void(0)" class="list-group-item flex-column align-items-start"
+                   ng-repeat="convo in msgController.conversations track by $index"
+                   ng-class="{'message-received' : convo.flag == true || convo.newConvo == true, 'new-conversation' : msgController.isActive(convo)}"
+                   ng-click="msgController.getMessagesByConvoId(convo, msgController.pageNumber); msgController.selectConvo(convo)">
+                    <div class="d-flex w-100 justify-content-between">
+                        <small class="text-muted pull-right"
+                               ng-bind="((convo.updated | date:'shortDate') == (msgController.today | date:'shortDate')) ? (convo.updated | date:'shortTime') : (convo.updated | date: 'shortDate') "></small>
+                        <h5 class="mb-1"
+                            ng-bind="convo.senderId == msgController.senderId ? convo.receiverFullName : convo.senderFullName"></h5>
+                    </div>
+                    <p class="list-group-item-text text-muted"
+                       ng-bind="(convo.content | limitTo: 20) + (convo.content.length >= 20 ? '...' : '')"></p>
+                </a>
+            </div>
+        </div> <!-- Convo thread list end -->
+
+        <div class="col-md-8">
+            <a href="/profilepageng/{{msgController.receiverPersonId}}/public" target="_blank"><div title="Open {{msgController.receiverName}}'s profile"><label style="cursor:pointer">{{msgController.receiverName}}</label></div></a> 
+        <hr />
+            <ul name="msg-thread" class="msg-thread-container list-group" scroll-bottom="msgController.messages">
+                <!--Messages go here-->
+                <li class="text-center" ng-show="msgController.messages.length >= 20">
+                    <a href="javascript:void(0)" ng-click="msgController.loadMessages()">Load more messages...</a>
+                </li>
+                <li ng-hide="msgController.messages.length > 0">
+                    <p class="text-center text-muted">No messages yet...</p>
+                </li>
+                <li class="list-group-item" ng-repeat="message in msgController.messages | orderBy: 'id'" ng-class="{'text-right' : message.senderId == msgController.senderId, 'message-received' : message.senderId != msgController.senderId}">
+                    <p class="list-group-item-text message-thread lead"
+                       ng-bind-html="message.content | linky:'_blank'"></p>
+                    <p class="list-group-item-text text-muted small"
+                       ng-bind="message.created | date : 'medium'"></p>
+                    <input type="hidden" ng-bind="message.isRead" />
+                </li>
+
+            </ul>
+
+            <div class="msg-container">
+                <form class="form-group" name="msgController.messageForm" ng-submit="msgController.postMessage(msgController.messageForm.$valid)" novalidate>
+                    <textarea ng-enter="msgController.postMessage(msgController.messageForm.$valid)" auto-grow ng-model="msgController.newMessage.content" class="form-control" name="messageContent" placeholder="Enter message here..."
+                              ng-click="msgController.readMsgs()"
+                              maxlength="3000" required></textarea>
+                    <div ng-messages="msgController.messageForm.messageContent.$error">
+                        <div ng-message="required"></div>
+                    </div>
+                    <br />
+                    <input type="submit" class="btn btn-cta-primary pull-right" value="Send" ng-disabled="msgController.messageForm.$invalid" scroll-bottom="convoItem" />
+                </form>
+                <br />
+            </div>
+        </div> <!-- Message container end -->
+    </div>
+</div>
+
+<br />
+
+@section scripts {
+    <script src="~/Scripts/jquery.signalR-2.2.2.js"></script>
+    <script src="controller.messages.js"></script>
+    <script src="services.errorlog.js"></script>
+    <script src="services.messages.js"></script>
+}

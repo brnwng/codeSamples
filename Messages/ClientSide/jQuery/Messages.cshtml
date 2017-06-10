@@ -1,0 +1,487 @@
+
+@{
+    Layout = "~/Views/Shared/_LayoutPublic.cshtml";
+}
+
+<style>
+    .msg-thread-container, .convoContainer {
+        height: 30em;
+        overflow-y: hidden;
+    }
+</style>
+
+<br />
+
+<div class="container">
+    <div class="msg-messaging-container container">
+        <div class="msg-conversations-container col-md-4 container">
+            <label>Messaging</label> <input type="button" class="btn btn-cta btn-cta-primary pull-right" value="New Message" id="newMessageButton" name="newMessageButton" /> <hr />
+            <div class="list-group convoContainer" style="overflow-y:auto">
+                <!-- CONVO THREADS GO HERE -->
+            </div>
+        </div>
+        <div class="msg-thread col-md-8">
+            <label for="msg-thread"></label> <hr />
+            <ul name="msg-thread" class="msg-thread msg-thread-container list-group" style="overflow-y:auto" id="msgContainer" data-id="null">
+                <!-- MESSAGES GO HERE-->
+            </ul>
+            <div class="msg-container">
+                <form class="form-group" id="messageForm">
+                    <textarea class="form-control" id="messageContent" name="messageContent" placeholder="Enter message here..."></textarea>
+                </form>
+                <br />
+                <input type="button" class="btn btn-cta btn-cta-primary pull-right" id="sendMessageBtn" name="sendMessageBtn" value="Send" />
+            </div>
+        </div>
+    </div>
+</div>
+<br />
+
+<div class="modal fade" tabindex="-1" role="dialog" id="newMessageModal">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title">New Message</h4>
+            </div>
+            <div class="modal-body">
+                <form id="newMessageForm">
+                    <div class="form-group">
+                        <label for="messageReceiver">Name</label>
+                        <input type="text" class="form-control" id="messageReceiver" name="messageReceiver" placeholder="Enter name...">
+                    </div>
+                    <div class="form-group">
+                        <label for="messageSubject">Subject</label>
+                        <input type="text" class="form-control" id="messageSubject" name="messageSubject" placeholder="Enter subject...">
+                    </div>
+                    <div class="form-group">
+                        <label for="newMessageContent">Content</label>
+                        <textarea class="form-control" id="newMessageContent" name="newMessageContent" placeholder="Enter message..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-cta-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-cta-primary" id="modalSend">Send</button>
+            </div>
+        </div><!-- /.modal-content -->
+    </div><!-- /.modal-dialog -->
+</div><!-- /.modal -->
+
+<script type="text/html" id="messageTemplate">
+
+    <li class="list-group-item mList">
+        <p class="list-group-item-text small mSubject"></p>
+        <p class="list-group-item-heading lead mContent"></p>
+        <p class="list-group-item-text small mDate"></p>
+    </li>
+    <!---->
+
+</script>
+
+<script type="text/html" id="convoTemplate">
+
+    <a href="#" class="list-group-item convoItem">
+        <h5 class="list-group-item-heading convoName"></h5>
+        <p class="list-group-item-text convoSubject">Subject goes here</p>
+        <p class="list-group-item-text convoMessage small"></p>
+        <p class="text-right small convoDate"></p>
+    </a>
+    <!---->
+</script>
+
+@section scripts {
+
+    <script type="text/javascript">
+
+        sabio.page.senderId = sabio.page.guid;
+        sabio.page.currentConvo = null;
+        sabio.page.readMessages = [];
+
+        sabio.page.startUp = function () {
+
+            // send button
+            $("#sendMessageBtn").on("click", sabio.page.handlers.onSendMessageClick);
+
+            // delegated button for convo thread
+            $(".convoContainer").on("click", ".convoItem", sabio.page.handlers.onConvoClick);
+
+            // new message modal
+            $("#newMessageButton").on("click", sabio.page.handlers.onNewMessageClick);
+
+            // send new message
+            $("#modalSend").on("click", sabio.page.handlers.onNewMessageConfirm);
+
+            // read messages
+            $("#messageContent").on("click", sabio.page.handlers.readMessagesClick);
+            $(".msg-thread-container").on("mouseenter mouseleave", sabio.page.handlers.readMessagesClick)
+
+            $("#newMessageForm").validate({
+                rules: {
+                    messageReceiver: {
+                        required: true
+                    },
+                    messageSubject: {
+                        required: true
+                    },
+                    newMessageContent: {
+                        required: true
+                    }
+                }
+
+            })
+
+            $("#messageForm").validate({
+                rules: {
+                    messageContent: {
+                        required: true
+                    }
+                }
+            })
+
+            // get conversation list
+            sabio.services.getConversationList(sabio.page.senderId, sabio.page.handlers.onGetConvoListSuccess)
+        }
+
+        // *** Handlers
+
+        // get convo list
+        sabio.page.handlers.onGetConvoListSuccess = function (data, textStatus, jqXHR) {
+            console.log("in sabio.page.handlers.onGetConvoListSuccess transaction id = " + data.transactionId);
+
+            var conversationThreads = data.items;
+
+            for (var i = 0; i < conversationThreads.length; i++) {
+
+                // get convo
+                var convo = conversationThreads[i];
+
+                // get clone
+                var $clone = sabio.page.getClone("#convoTemplate");
+
+                // get sender
+                if (sabio.page.senderId == convo.senderID) {
+                    var receiverName = convo.receiverFirst + " " + convo.receiverLast;
+                } else {
+                    receiverName = convo.senderFirst + " " + convo.senderLast;
+                }
+
+                if (i == 0) {
+
+                    // first convo id
+                    sabio.page.currentConvo = convo.id
+
+                    // receiver name
+                    $("label[for='msg-thread']").text(receiverName);
+
+                    // send service to fill messages
+                    sabio.services.getMessagesByConvoId(sabio.page.currentConvo, sabio.page.handlers.onGetMessagesByConvoIdSuccess)
+                }
+
+                // get values
+                var convoDate = convo.updated.substring(0, 4);
+
+                // hydrate clone
+                $clone.find(".convoName").text(receiverName);
+                $clone.find(".convoSubject").text(convo.subject);
+                $clone.find(".convoDate").text(convo.updated);
+                $clone.attr("data-convoid", convo.id);
+
+                $clone.appendTo(".convoContainer")
+            }
+        }
+
+        // click on convo thread
+        sabio.page.handlers.onConvoClick = function (e) {
+            if (e) {
+                e.preventDefault();
+            }
+            $(".msg-thread-container").empty();
+
+            // get current convo id
+            var currentConvoId = $(this).data("convoid");
+
+            // set current convo id
+            sabio.page.currentConvo = currentConvoId;
+
+            var fullName = $(this).find(".convoName").text();
+
+            $("label[for='msg-thread']").text(fullName);
+
+            sabio.services.getMessagesByConvoId(currentConvoId, sabio.page.handlers.onGetMessagesByConvoIdSuccess)
+        }
+
+        // get messages by convo id
+        sabio.page.handlers.onGetMessagesByConvoIdSuccess = function (data, textStatus, jqXHR) {
+            console.log("in sabio.page.handlers.onGetMessagesByConvoIdSuccess transaction id = " + data.transactionId);
+
+            var messages = data.items;
+
+            for (var i = 0; i < messages.length; i++) {
+
+                // get message
+                var message = messages[i];
+
+                // get clone
+                var $clone = sabio.page.getClone("#messageTemplate");
+
+                // hydrate clone
+                $clone.find(".mContent").text(message.content);
+                $clone.find(".mDate").text(message.created);
+                $clone.attr("data-id", message.id);
+                $clone.attr("data-isread", message.isRead);
+
+                if (sabio.page.senderId == message.senderId) {
+                    $clone.addClass("text-right");
+                } else {
+                    $clone.addClass("list-group-item-info");
+                }
+
+                $clone.appendTo(".msg-thread-container");
+            }
+
+            sabio.page.scrollToElement(".mList:last", ".msg-thread-container");
+        }
+
+
+        // post message click
+        sabio.page.handlers.onSendMessageClick = function (e) {
+            if (e) {
+                e.preventDefault();
+            }
+
+            // get values
+            var messageContent = $("#messageContent").val();
+
+
+            var data = {
+                "convoId": sabio.page.currentConvo
+                , "senderId": sabio.page.senderId
+                , "content": messageContent
+            }
+
+            if ($("#messageForm").valid()) {
+                // service to post message
+                sabio.services.postMessage(data, sabio.page.handlers.onPostMessageSuccess);
+            }
+
+        }
+
+        // posted message
+        sabio.page.handlers.onPostMessageSuccess = function (data, textStatus, jqXHR) {
+            console.log("in sabio.page.handlers.onPostMessageSuccess transaction id = " + data.transactionId);
+
+
+            // get message
+            var messageContent = $("#messageContent").val();
+
+            // get clone
+            var $clone = sabio.page.getClone("#messageTemplate");
+
+            // hydrate and append
+            $clone.find(".mContent").text(messageContent);
+            $clone.addClass("text-right");
+
+            // target own convo and move message to the top
+            $("[data-convoid=" + sabio.page.currentConvo + "]").prependTo(".convoContainer");
+
+            // append message to msg container
+            $clone.appendTo(".msg-thread-container");
+
+            sabio.page.scrollToElement(".mList:last", ".msg-thread-container");
+
+            // clear message form
+            $("#messageForm")[0].reset();
+
+        }
+
+        // new message click
+        sabio.page.handlers.onNewMessageClick = function (e) {
+            if (e) {
+                e.preventDefault();
+            }
+
+            // show modal
+            $("#newMessageModal").modal("show");
+        }
+
+        // new message confirm
+        sabio.page.handlers.onNewMessageConfirm = function (e) {
+            if (e) {
+                e.preventDefault();
+            }
+
+            // receiver id
+            var receiverId = $("#messageReceiver").val(); // TODO: GET RECEIVER GUID BY NAME
+            var subject = $("#messageSubject").val();
+
+            var newConvo = {
+                "senderId": sabio.page.senderId
+                , "receiverId": receiverId
+                , "subject": subject
+            }
+
+            if ($("#newMessageForm").valid()) {
+                sabio.services.postConversation(newConvo, sabio.page.handlers.onPostConvoSuccess);
+            }
+
+        }
+
+        // post new convo
+        sabio.page.handlers.onPostConvoSuccess = function (data, textStatus, jqXHR) {
+            console.log("in sabio.page.handlers.onPostNewConvoSuccess transaction id = " + data.transactionId);
+
+            var convoId = data.item;
+
+            var content = $("#newMessageContent").val();
+
+            var newMessage = {
+                "convoId": convoId
+                , "senderId": sabio.page.senderId
+                , "content": content
+            }
+
+            // clear convo list
+            $(".convoContainer").empty();
+
+            // get conversation list
+            sabio.services.getConversationList(sabio.page.senderId, sabio.page.handlers.onGetConvoListSuccess)
+
+            // post message
+            sabio.services.postMessage(newMessage, sabio.page.handlers.onPostNewMessageSuccess);
+
+        }
+
+        // post new message
+        sabio.page.handlers.onPostNewMessageSuccess = function (data, textStatus, jqXHR) {
+            console.log("in sabio.page.handlers.onPostNewMessage transaction id = " + data.transactionId);
+
+            var content = $("#newMessageContent").val();
+
+            $(".msg-thread-container").empty();
+
+            // get name of first convo
+            var fullName = $(".convoItem:first").find(".convoName").text();
+
+            // change label name for messages
+            $("label[for='msg-thread']").text(fullName);
+
+            $("#newMessageModal").modal("hide");
+
+            // clear form
+            $("#newMessageForm")[0].reset();
+
+        }
+
+        sabio.page.handlers.readMessagesClick = function (e) {
+            if (e) {
+                e.preventDefault();
+            }
+
+            // loop through each list item
+            $(".list-group-item-info").each(function () {
+
+                // if message is not read, update message
+                if ($(this).data("isread") === false) {
+                    sabio.page.readMessages.push($(this).data("id"));
+                    $(this).data("isread", true);
+                    console.log($(this).data("id"));
+                }
+            })
+
+            // if read message array exists, update messages
+            if (sabio.page.readMessages.length > 0) {
+
+                var readMessages = sabio.page.readMessages.join("&mids=");
+
+                sabio.services.updateReadMessages("readmsg/?mids=" + readMessages, sabio.page.handlers.onUpdateReadMsgSuccess)
+            }
+
+
+        }
+
+        sabio.page.handlers.onUpdateReadMsgSuccess = function (data, textStatus, jqXHR) {
+            console.log("in sabio.page.handlers.onUpdateReadMsgSuccess transaction id = " + data.transactionId);
+
+            // clear array
+            sabio.page.readMessages = [];
+        }
+
+        // *** SERVICES
+
+        // get conversation list
+        sabio.services.getConversationList = function (senderId, onSuccess) {
+            sabio.page.sendAjax("messaging/clist=" + senderId, "GET", null, onSuccess);
+        }
+
+        // get message by convo id
+        sabio.services.getMessagesByConvoId = function (convoId, onSuccess) {
+            sabio.page.sendAjax("messaging/convo/" + convoId, "GET", null, onSuccess);
+        }
+
+        // service to post start of conversation
+        sabio.services.postConversation = function (data, onSuccess) {
+            sabio.page.sendAjax("messaging", "POST", data, onSuccess);
+        }
+
+        // service to post messages
+        sabio.services.postMessage = function (data, onSuccess) {
+            sabio.page.sendAjax("messaging/msg", "POST", data, onSuccess);
+        }
+
+        // service to update read messages
+        sabio.services.updateReadMessages = function (ids, onSuccess) {
+            sabio.page.sendAjax("messaging/" + ids, "PUT", null, onSuccess);
+        }
+
+        // get clone
+        sabio.page.getClone = function (template) {
+
+            // get template & turn in jQuery
+            var $myTemplate = $(template);
+
+            // get html
+            var htmlTemplate = $myTemplate.html();
+
+            // load html into jquery
+            var $html = $(htmlTemplate);
+
+            var $clone = $html.clone();
+
+            if ($clone.length == 0) {
+                console.log("This clone '" + $clone + "' does not exist!");
+            } else {
+                return $clone;
+            }
+        }
+
+        sabio.page.scrollToElement = function (selector, html) {
+            var $element = $(selector);
+
+            if ($element.length == 0) {
+                // We just want to console log for debugging purposes.
+                console.log("The selector '" + selector + "' resulted in zero results");
+
+                // We stop the method.
+                return;
+            }
+
+            // find the offset, this returns an obejct
+            var offset = $element.offset();
+
+            // find the property of the offset
+            var offsetTop = offset.top;
+
+            // select html body
+            var $html = $(html);
+
+            // build object that will be passed
+
+            var scrollArgs = {
+                scrollTop: offsetTop
+            };
+
+            $html.animate(scrollArgs, 1);
+        }
+    </script>
+}
